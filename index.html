@@ -1,0 +1,1588 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#ffe4f1">
+<title>シャボン玉あてっこゲーム</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Kosugi+Maru&family=Mochiy+Pop+One&display=swap');
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    height: 100dvh; /* 動的ビューポート(iOSアドレスバー対応) */
+    overflow: hidden;
+    font-family: 'Kosugi Maru', sans-serif;
+    background: linear-gradient(180deg, #ffe4f1 0%, #c9e7ff 50%, #b6f0d8 100%);
+    touch-action: manipulation;
+    overscroll-behavior: none;
+    /* スマホでスクロール・引っ張り更新を完全に防止 */
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+
+  #game {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh; /* iOSアドレスバー対応 */
+    overflow: hidden;
+    /* セーフエリア対応(iPhoneのノッチ・ホームバー) */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* 背景の雲 */
+  .cloud {
+    position: absolute;
+    background: rgba(255,255,255,0.6);
+    border-radius: 50%;
+    filter: blur(2px);
+    animation: drift 30s linear infinite;
+    pointer-events: none;
+  }
+  .cloud:nth-child(1){ width:140px; height:50px; top:10%; left:-200px; animation-duration:35s;}
+  .cloud:nth-child(2){ width:200px; height:70px; top:25%; left:-300px; animation-duration:50s; animation-delay:-10s;}
+  .cloud:nth-child(3){ width:120px; height:40px; top:60%; left:-200px; animation-duration:40s; animation-delay:-20s;}
+
+  @keyframes drift {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(100vw + 300px)); }
+  }
+
+  /* 上部の表示エリア */
+  .top-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 12px 16px 8px;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .question-num {
+    display: inline-block;
+    background: linear-gradient(135deg, #ff9eb6, #ff6b95);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: 14px;
+    box-shadow: 0 3px 0 #d04572;
+    margin-bottom: 8px;
+  }
+
+  .target-display {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(8px);
+    border: 3px dashed #ff85a2;
+    border-radius: 20px;
+    padding: 10px 14px;
+    display: inline-block;
+    box-shadow: 0 4px 12px rgba(255,107,149,0.2);
+  }
+
+  .target-label {
+    font-size: 13px;
+    color: #d04572;
+    margin-bottom: 4px;
+    font-family: 'Mochiy Pop One', sans-serif;
+  }
+
+  .target-letters {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .target-letter {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #fff5b8, #ffe066);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: 22px;
+    color: #c9540e;
+    box-shadow: 0 3px 0 #d4a017, inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+
+  /* もういちど表示ボタン */
+  .replay-btn {
+    margin-top: 8px;
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: 13px;
+    color: white;
+    background: linear-gradient(135deg, #7ec8ff, #4a9eff);
+    border: none;
+    padding: 7px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #2e7ed6;
+    transition: all 0.1s;
+    pointer-events: auto;
+  }
+
+  .replay-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #2e7ed6;
+  }
+
+  .replay-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* 1文字ずつ表示する大きな文字 */
+  .letter-reveal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    z-index: 50;
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(120px, 45vw, 220px);
+    color: #fff;
+    -webkit-text-stroke: 4px #d04572;
+    text-shadow:
+      0 0 30px rgba(255,107,149,0.6),
+      0 6px 12px rgba(208,69,114,0.4);
+    pointer-events: none;
+    opacity: 0;
+    animation: letterPop 1s ease-out forwards;
+    line-height: 1;
+  }
+
+  @keyframes letterPop {
+    0% {
+      transform: translate(-50%, -50%) scale(0) rotate(-15deg);
+      opacity: 0;
+    }
+    25% {
+      transform: translate(-50%, -50%) scale(1.2) rotate(5deg);
+      opacity: 1;
+    }
+    45% {
+      transform: translate(-50%, -50%) scale(1) rotate(-2deg);
+      opacity: 1;
+    }
+    75% {
+      transform: translate(-50%, -50%) scale(1) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(0.6) rotate(0deg);
+      opacity: 0;
+    }
+  }
+
+  /* カウントダウン的な小さな進捗ドット */
+  .reveal-dots {
+    position: fixed;
+    top: calc(50% + 130px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  .reveal-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    border: 2px solid #d04572;
+  }
+
+  .reveal-dot.active {
+    background: #ff6b95;
+    box-shadow: 0 0 10px #ff6b95;
+  }
+
+  /* タップした文字の表示 */
+  .answer-bar {
+    position: absolute;
+    bottom: 80px;
+    left: 0; right: 0;
+    z-index: 50;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .answer-letters {
+    display: inline-flex;
+    gap: clamp(6px, 2vw, 8px);
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(8px);
+    padding: clamp(8px, 2.5vw, 10px) clamp(12px, 4vw, 16px);
+    border-radius: 20px;
+    border: 3px solid #7ec8ff;
+    box-shadow: 0 4px 12px rgba(126,200,255,0.3);
+  }
+
+  .answer-slot {
+    width: clamp(38px, 11vw, 44px);
+    height: clamp(38px, 11vw, 44px);
+    border-radius: 10px;
+    background: rgba(126,200,255,0.2);
+    border: 2px dashed #7ec8ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(22px, 6.5vw, 26px);
+    color: #1565c0;
+    transition: all 0.3s ease;
+  }
+
+  .answer-slot.filled {
+    background: linear-gradient(135deg, #b3e0ff, #7ec8ff);
+    border: 2px solid #1976d2;
+    color: white;
+    transform: scale(1.1);
+  }
+
+  /* シャボン玉 - 虹色の薄膜と透明感 */
+  .bubble {
+    position: absolute;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    /* 虹色グラデーションの薄い膜 */
+    background:
+      radial-gradient(
+        circle at 30% 25%,
+        rgba(255,255,255,0.7) 0%,
+        rgba(255,255,255,0.15) 12%,
+        rgba(255,200,230,0.18) 30%,
+        rgba(200,180,255,0.18) 45%,
+        rgba(150,220,255,0.18) 60%,
+        rgba(180,255,220,0.18) 75%,
+        rgba(255,230,180,0.18) 90%,
+        rgba(255,180,200,0.22) 100%
+      );
+    /* 中央はほぼ透明にして向こう側が透けるように */
+    box-shadow:
+      inset 0 0 20px rgba(255,255,255,0.2),
+      inset -6px -8px 12px rgba(180,150,255,0.15),
+      inset 4px 6px 10px rgba(255,255,255,0.3),
+      0 0 18px rgba(255,255,255,0.35),
+      0 4px 10px rgba(150,180,255,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1.5px solid rgba(255,255,255,0.5);
+    transition: transform 0.1s;
+    backdrop-filter: blur(0.5px);
+    -webkit-backdrop-filter: blur(0.5px);
+    animation: iridescent 4s ease-in-out infinite;
+  }
+
+  /* 虹色の膜が時間で揺らぐ */
+  @keyframes iridescent {
+    0%, 100% {
+      filter: hue-rotate(0deg);
+    }
+    50% {
+      filter: hue-rotate(40deg);
+    }
+  }
+
+  /* 文字表示中はシャボン玉を非表示 */
+  .bubble.hidden-bubble {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.5);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+
+  .bubble.show-bubble {
+    animation: bubbleAppear 0.5s ease-out forwards;
+  }
+
+  @keyframes bubbleAppear {
+    0% {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* 大きなハイライト(光の反射) */
+  .bubble::before {
+    content: '';
+    position: absolute;
+    top: 10%;
+    left: 15%;
+    width: 35%;
+    height: 30%;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(255,255,255,0.95) 0%,
+      rgba(255,255,255,0.5) 40%,
+      transparent 75%
+    );
+    border-radius: 50%;
+    pointer-events: none;
+    transform: rotate(-20deg);
+  }
+
+  /* 小さなサブハイライト */
+  .bubble::after {
+    content: '';
+    position: absolute;
+    top: 22%;
+    left: 28%;
+    width: 8%;
+    height: 8%;
+    background: rgba(255,255,255,0.9);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .bubble-letter {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: 24px;
+    color: #2f2f2f;
+    text-shadow:
+      0 0 6px rgba(255,255,255,1),
+      0 0 3px rgba(255,255,255,1),
+      0 1px 2px rgba(255,255,255,0.9);
+    pointer-events: none;
+    position: relative;
+    z-index: 2;
+    line-height: 1;
+  }
+
+  .bubble.popping {
+    animation: pop 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    pointer-events: none;
+  }
+
+  /* リアルなはじけ方:急膨張→ストレッチ→消滅 */
+  @keyframes pop {
+    0% {
+      transform: scale(1);
+      opacity: 1;
+      filter: blur(0px) brightness(1);
+    }
+    25% {
+      transform: scale(1.35);
+      opacity: 0.9;
+      filter: blur(0.5px) brightness(1.4);
+    }
+    45% {
+      transform: scale(1.55);
+      opacity: 0.4;
+      filter: blur(2px) brightness(1.8);
+      border-width: 3px;
+    }
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+      filter: blur(8px) brightness(2);
+    }
+  }
+
+  /* はじけるときに飛び散る水滴 */
+  .splash-particle {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(
+      circle at 30% 30%,
+      rgba(255,255,255,0.95) 0%,
+      rgba(200,220,255,0.6) 40%,
+      rgba(255,200,230,0.4) 70%,
+      rgba(180,255,220,0.2) 100%
+    );
+    box-shadow:
+      inset -2px -2px 3px rgba(180,150,255,0.3),
+      inset 1px 1px 2px rgba(255,255,255,0.6),
+      0 0 4px rgba(255,255,255,0.5);
+    z-index: 10;
+  }
+
+  /* 破裂した瞬間の光のフラッシュ */
+  .pop-flash {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(
+      circle,
+      rgba(255,255,255,0.95) 0%,
+      rgba(255,230,200,0.5) 30%,
+      rgba(255,200,230,0.3) 60%,
+      transparent 80%
+    );
+    animation: popFlash 0.4s ease-out forwards;
+    z-index: 9;
+  }
+
+  @keyframes popFlash {
+    0% {
+      transform: scale(0.3);
+      opacity: 0;
+    }
+    30% {
+      transform: scale(1.5);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  /* 飛び散る粒子のアニメーション(各粒子に個別のCSS変数で方向を指定) */
+  @keyframes splash {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--dx), var(--dy)) scale(0.2);
+      opacity: 0;
+    }
+  }
+
+  /* シャボン玉の浮遊 */
+  @keyframes float {
+    0%, 100% { transform: translate(0,0); }
+    25% { transform: translate(8px, -10px); }
+    50% { transform: translate(-5px, 5px); }
+    75% { transform: translate(-10px, -8px); }
+  }
+
+  /* スタート画面 */
+  .screen {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    text-align: center;
+  }
+
+  /* 汎用 hidden クラス - 全要素で機能する */
+  .hidden {
+    display: none !important;
+  }
+
+  .screen.hidden {
+    display: none;
+  }
+
+  .title {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(22px, 7vw, 32px);
+    color: #d04572;
+    text-shadow:
+      3px 3px 0 #fff,
+      6px 6px 0 rgba(208,69,114,0.2);
+    margin-bottom: clamp(20px, 5vh, 30px);
+    line-height: 1.4;
+    animation: titleBounce 2s ease-in-out infinite;
+  }
+
+  @keyframes titleBounce {
+    0%, 100% { transform: scale(1) rotate(-2deg); }
+    50% { transform: scale(1.05) rotate(2deg); }
+  }
+
+  .instruction {
+    background: rgba(255,255,255,0.9);
+    border: 4px solid #ff85a2;
+    border-radius: 24px;
+    padding: clamp(14px, 4vw, 20px) clamp(16px, 5vw, 24px);
+    margin-bottom: clamp(20px, 5vh, 30px);
+    max-width: 92%;
+    box-shadow: 0 6px 0 #d04572;
+    font-size: clamp(14px, 4.2vw, 18px);
+    color: #5a3a8a;
+    line-height: 1.6;
+  }
+
+  .instruction strong {
+    color: #d04572;
+    font-family: 'Mochiy Pop One', sans-serif;
+  }
+
+  .big-button {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(22px, 6.5vw, 28px);
+    color: white;
+    background: linear-gradient(135deg, #ffb84d, #ff7e2e);
+    border: none;
+    padding: clamp(14px, 4vw, 18px) clamp(36px, 12vw, 50px);
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #c84e0e, 0 8px 20px rgba(255,126,46,0.4);
+    transition: all 0.1s;
+    animation: btnPulse 1.5s ease-in-out infinite;
+    /* タップターゲット最小44px確保 */
+    min-height: 48px;
+  }
+
+  .big-button:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #c84e0e, 0 4px 10px rgba(255,126,46,0.4);
+  }
+
+  @keyframes btnPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  /* 結果表示 */
+  .result-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .result-box {
+    background: white;
+    border-radius: 30px;
+    padding: clamp(22px, 6vw, 30px) clamp(26px, 8vw, 40px);
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 88%;
+  }
+
+  @keyframes popIn {
+    0% { transform: scale(0.3); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .result-text {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(34px, 10vw, 48px);
+    margin-bottom: 12px;
+  }
+
+  .result-text.correct { color: #ff6b95; }
+  .result-text.wrong { color: #5a8fdc; }
+
+  .result-illustration {
+    font-size: clamp(64px, 18vw, 90px);
+    margin: 16px 0;
+    animation: wiggle 0.6s ease infinite;
+    line-height: 1;
+  }
+
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+  }
+
+  .result-word {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(22px, 6.5vw, 28px);
+    color: #5a3a8a;
+    margin-top: 8px;
+  }
+
+  .result-correct-answer {
+    font-size: clamp(13px, 3.8vw, 16px);
+    color: #888;
+    margin-top: 8px;
+  }
+
+  /* 最終結果 */
+  .final-score {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: clamp(42px, 13vw, 56px);
+    color: #ff6b95;
+    text-shadow: 3px 3px 0 #fff, 6px 6px 0 rgba(255,107,149,0.2);
+    margin: 20px 0;
+  }
+
+  .final-message {
+    font-size: clamp(17px, 5vw, 22px);
+    color: #5a3a8a;
+    margin-bottom: 30px;
+  }
+
+  /* 下部のボタン群 - シャボン玉より必ず前面に */
+  .restart-bar {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    gap: 10px;
+  }
+
+  .restart-btn {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: 16px;
+    color: white;
+    background: linear-gradient(135deg, #a78bfa, #7c5cff);
+    border: none;
+    padding: 10px 24px;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #5a3acb;
+    transition: all 0.1s;
+  }
+
+  .restart-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #5a3acb;
+  }
+
+  /* やめるボタン */
+  .quit-btn {
+    font-family: 'Mochiy Pop One', sans-serif;
+    font-size: 16px;
+    color: white;
+    background: linear-gradient(135deg, #ff9a8b, #ff6b6b);
+    border: none;
+    padding: 10px 24px;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #cc4747;
+    transition: all 0.1s;
+  }
+
+  .quit-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #cc4747;
+  }
+
+  /* 紙吹雪 */
+  .confetti {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+    z-index: 150;
+  }
+
+  @keyframes confettiFall {
+    0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="cloud"></div>
+  <div class="cloud"></div>
+  <div class="cloud"></div>
+
+  <!-- スタート画面 -->
+  <div class="screen" id="startScreen">
+    <div class="title">🫧 さかさことば<br>シャボン玉ゲーム 🫧</div>
+    <div class="instruction">
+      <strong>ひょうじされた もじを<br>ぎゃくにして<br>シャボン玉を わってね!</strong>
+      <div style="margin-top:12px; font-size:14px;">
+        れい:「<strong>たしつく</strong>」と でたら<br>「く」「つ」「し」「た」の じゅんに タップ!
+      </div>
+    </div>
+    <button class="big-button" onclick="startGame()">スタート</button>
+  </div>
+
+  <!-- ゲーム画面の上部表示 -->
+  <div class="top-bar hidden" id="topBar">
+    <div class="question-num" id="questionNum">だい1もん / 10</div>
+    <div class="target-display">
+      <div class="target-label">もじの ぎゃくを タップ!</div>
+      <div class="target-letters" id="targetLetters" style="display:none;"></div>
+      <button class="replay-btn" id="replayBtn" onclick="replayLetters()">🔁 もういちど もじを ひょうじ</button>
+    </div>
+  </div>
+
+  <!-- 回答エリア -->
+  <!-- 回答エリア -->
+  <div class="answer-bar hidden" id="answerBar">
+    <div class="answer-letters" id="answerLetters"></div>
+  </div>
+
+  <!-- 終了画面 -->
+  <div class="screen hidden" id="endScreen">
+    <div class="title">🎉 おしまい! 🎉</div>
+    <div class="final-score" id="finalScore">0 / 10</div>
+    <div class="final-message" id="finalMessage"></div>
+    <button class="big-button" onclick="restartGame()">もう一度あそぶ</button>
+  </div>
+
+  <!-- 下部のリセットボタン -->
+  <div class="restart-bar hidden" id="restartBar">
+    <button class="quit-btn" id="quitBtn">🔃 リセット</button>
+  </div>
+</div>
+
+<script>
+  // 4文字のひらがな名詞と対応する絵文字
+  const WORDS = [
+    { word: 'くつした', emoji: '🧦' },
+    { word: 'ぼうけん', emoji: '🗺️' },
+    { word: 'たまねぎ', emoji: '🧅' },
+    { word: 'すいどう', emoji: '🚰' },
+    { word: 'しんぶん', emoji: '📰' },
+    { word: 'おにぎり', emoji: '🍙' },
+    { word: 'たいやき', emoji: '🐟' },
+    { word: 'じてんしゃ', emoji: '🚲' },
+    { word: 'えんぴつ', emoji: '✏️' },
+    { word: 'ひこうき', emoji: '✈️' },
+    { word: 'たいよう', emoji: '☀️' },
+    { word: 'てぶくろ', emoji: '🧤' },
+    { word: 'おもちゃ', emoji: '🧸' },
+    { word: 'みずたま', emoji: '💧' },
+    { word: 'かさたて', emoji: '☂️' },
+    { word: 'ねこじた', emoji: '🐱' },
+    { word: 'たからもの', emoji: '💎' },
+    { word: 'かいだん', emoji: '🪜' },
+    { word: 'やきいも', emoji: '🍠' },
+    { word: 'おはなみ', emoji: '🌸' },
+    { word: 'うちゅう', emoji: '🌌' },
+    { word: 'にじいろ', emoji: '🌈' },
+    { word: 'おりがみ', emoji: '📄' },
+    { word: 'ふうせん', emoji: '🎈' },
+    // 追加問題
+    { word: 'りんごあめ', emoji: '🍎' },
+    { word: 'たいこ', emoji: '🥁' },
+    { word: 'すいか', emoji: '🍉' },
+    { word: 'みかん', emoji: '🍊' },
+    { word: 'いちご', emoji: '🍓' },
+    { word: 'ぶどう', emoji: '🍇' },
+    { word: 'もも', emoji: '🍑' },
+    { word: 'ぱいなっぷる', emoji: '🍍' },
+    { word: 'たこやき', emoji: '🐙' },
+    { word: 'おすし', emoji: '🍣' },
+    { word: 'らーめん', emoji: '🍜' },
+    { word: 'かれー', emoji: '🍛' },
+    { word: 'ぱんだ', emoji: '🐼' },
+    { word: 'うさぎ', emoji: '🐰' },
+    { word: 'きりん', emoji: '🦒' },
+    { word: 'ぞうさん', emoji: '🐘' },
+    { word: 'ぺんぎん', emoji: '🐧' },
+    { word: 'いるか', emoji: '🐬' },
+    { word: 'らっこ', emoji: '🦦' },
+    { word: 'かえる', emoji: '🐸' },
+    { word: 'ちょうちょ', emoji: '🦋' },
+    { word: 'てんとう', emoji: '🐞' },
+    { word: 'ばすてい', emoji: '🚏' },
+    { word: 'でんしゃ', emoji: '🚃' },
+    { word: 'しょうぼう', emoji: '🚒' },
+    { word: 'けいさつ', emoji: '🚓' },
+    { word: 'ろけっと', emoji: '🚀' },
+    { word: 'ぼうし', emoji: '🧢' },
+    { word: 'めがね', emoji: '👓' },
+    { word: 'とけい', emoji: '⌚' },
+    { word: 'かばん', emoji: '👜' },
+    { word: 'こうえん', emoji: '🌳' },
+    { word: 'うみべ', emoji: '🏖️' },
+    { word: 'やまみち', emoji: '⛰️' },
+    { word: 'おんせん', emoji: '♨️' },
+    { word: 'はなび', emoji: '🎆' },
+    { word: 'まつり', emoji: '🎊' },
+    { word: 'けーき', emoji: '🎂' },
+    { word: 'どーなつ', emoji: '🍩' },
+    { word: 'ちょこ', emoji: '🍫' },
+    { word: 'あいす', emoji: '🍦' },
+    { word: 'ぷりん', emoji: '🍮' },
+    { word: 'ほっとけーき', emoji: '🥞' },
+    { word: 'たんぽぽ', emoji: '🌼' },
+    { word: 'ひまわり', emoji: '🌻' },
+    { word: 'さくら', emoji: '🌸' },
+    { word: 'きのこ', emoji: '🍄' },
+    { word: 'もみじ', emoji: '🍁' },
+    { word: 'ゆきだま', emoji: '❄️' },
+    { word: 'かみなり', emoji: '⚡' },
+    { word: 'おつきさま', emoji: '🌙' },
+    { word: 'ほしぞら', emoji: '🌠' },
+  ];
+
+  // 4文字のものだけにフィルター(本来の問題の指定どおり)
+  const FOUR_CHAR_WORDS = WORDS.filter(w => [...w.word].length === 4);
+
+  const TOTAL_QUESTIONS = 10;
+
+  let questions = [];
+  let currentQuestion = 0;
+  let score = 0;
+  let currentTarget = ''; // 逆さに表示する文字列
+  let currentAnswer = ''; // 正しい答え(元の名詞)
+  let currentEmoji = '';
+  let userTaps = []; // ユーザーがタップした文字
+  let bubbles = []; // 画面上のシャボン玉
+  let acceptingTaps = true;
+  let usedWords = []; // これまでに出題した問題(同じ問題を出さないため)
+  let lastQuestions = []; // 直前のゲームの問題セット(履歴リセット直後の被りを防ぐ)
+
+  // localStorageから過去の出題履歴を復元
+  try {
+    const saved = localStorage.getItem('bubbleGameUsedWords');
+    if (saved) usedWords = JSON.parse(saved) || [];
+    const savedLast = localStorage.getItem('bubbleGameLastQuestions');
+    if (savedLast) lastQuestions = JSON.parse(savedLast) || [];
+  } catch(e) {}
+  let pendingTimers = []; // 進行中のsetTimeoutを記録(リセット時に全キャンセル)
+  let gameActive = false; // ゲームが実行中か(リセットすると false)
+  let revealToken = 0; // 文字表示の世代カウンタ。リセットや次問題で増えて古い処理を無効化
+
+  // タイマー登録ヘルパー
+  function addTimer(fn, ms) {
+    const id = setTimeout(() => {
+      // 完了したらリストから外す
+      pendingTimers = pendingTimers.filter(t => t !== id);
+      fn();
+    }, ms);
+    pendingTimers.push(id);
+    return id;
+  }
+
+  // ===== サウンド (Web Audio API) =====
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
+
+  // 問題の文字が表示されるときの音 (Web Audio API Sine波 1000Hz)
+  function playLetterRevealSine() {
+    try {
+      const c = getAudioCtx();
+      if (c.state === 'suspended') c.resume();
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = 'sine';
+      o.frequency.value = 1000;
+      g.gain.setValueAtTime(0.3, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.1);
+      o.connect(g).connect(c.destination);
+      o.start();
+      o.stop(c.currentTime + 0.1);
+    } catch(e) {}
+  }
+
+  // シャボン玉タップ時の「シュッ!」スプレー風音 (ホワイトノイズ + ハイパスフィルター)
+  function playPop() {
+    try {
+      const c = getAudioCtx();
+      if (c.state === 'suspended') c.resume();
+      const now = c.currentTime;
+      const duration = 0.12;
+
+      // ホワイトノイズを生成 (バッファに乱数を入れる)
+      const bufferSize = Math.floor(c.sampleRate * duration);
+      const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      // ノイズソース
+      const noise = c.createBufferSource();
+      noise.buffer = buffer;
+
+      // ハイパスフィルター (4000Hz以下をカット)
+      const filter = c.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 4000;
+
+      // ゲイン (アタック0.01秒 → 指数減衰で0.001まで)
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.4, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      // 接続: noise → filter → gain → destination
+      noise.connect(filter).connect(g).connect(c.destination);
+      noise.start(now);
+      noise.stop(now + duration);
+    } catch(e) {}
+  }
+
+  function playCorrect() {
+    // ピンポン!の音 (高い音→さらに高い音)
+    try {
+      const ctx = getAudioCtx();
+      const notes = [
+        { freq: 880, start: 0, dur: 0.2 },     // A5
+        { freq: 1318.5, start: 0.2, dur: 0.4 } // E6
+      ];
+      notes.forEach(n => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(n.freq, ctx.currentTime + n.start);
+        g.gain.setValueAtTime(0, ctx.currentTime + n.start);
+        g.gain.linearRampToValueAtTime(0.3, ctx.currentTime + n.start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + n.start + n.dur);
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(ctx.currentTime + n.start);
+        o.stop(ctx.currentTime + n.start + n.dur);
+      });
+    } catch(e) {}
+  }
+
+  function playWrong() {
+    // ブッブー!の音 (低い音 ×2)
+    try {
+      const ctx = getAudioCtx();
+      const notes = [0, 0.25];
+      notes.forEach(start => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(180, ctx.currentTime + start);
+        g.gain.setValueAtTime(0, ctx.currentTime + start);
+        g.gain.linearRampToValueAtTime(0.2, ctx.currentTime + start + 0.02);
+        g.gain.setValueAtTime(0.2, ctx.currentTime + start + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + 0.22);
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(ctx.currentTime + start);
+        o.stop(ctx.currentTime + start + 0.22);
+      });
+    } catch(e) {}
+  }
+
+  // ===== ゲームロジック =====
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function startGame() {
+    getAudioCtx(); // ユーザー操作で音声コンテキストを起動
+
+    // 進行中のタイマーがあればクリア
+    pendingTimers.forEach(t => clearTimeout(t));
+    pendingTimers = [];
+    revealToken++; // 古い文字表示を無効化
+    gameActive = true;
+
+    // 前回までに使った問題を除いた候補を作る
+    let available = FOUR_CHAR_WORDS.filter(w => !usedWords.includes(w.word));
+
+    // 残りが10問より少ない場合は履歴をリセット(全問題を使い切ったら最初から)
+    // ただし、直前のゲームと同じ問題が含まれないように、それらは除外する
+    if (available.length < TOTAL_QUESTIONS) {
+      usedWords = [];
+      available = FOUR_CHAR_WORDS.filter(w => !lastQuestions.includes(w.word));
+      // 万一それでも10問足りない場合は仕方なく全部から選ぶ
+      if (available.length < TOTAL_QUESTIONS) {
+        available = FOUR_CHAR_WORDS.slice();
+      }
+    }
+
+    // ランダムに10問選ぶ
+    questions = shuffle(available).slice(0, TOTAL_QUESTIONS);
+
+    // 出題した問題を履歴に追加
+    questions.forEach(q => usedWords.push(q.word));
+
+    // 今回の問題セットを「直前の問題」として記録(履歴リセット時の被り回避用)
+    lastQuestions = questions.map(q => q.word);
+
+    // localStorage に保存(次回起動時にも履歴が残るように)
+    try {
+      localStorage.setItem('bubbleGameUsedWords', JSON.stringify(usedWords));
+      localStorage.setItem('bubbleGameLastQuestions', JSON.stringify(lastQuestions));
+    } catch(e) {}
+
+    currentQuestion = 0;
+    score = 0;
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('endScreen').classList.add('hidden');
+    document.getElementById('topBar').classList.remove('hidden');
+    document.getElementById('answerBar').classList.remove('hidden');
+    document.getElementById('restartBar').classList.remove('hidden');
+    nextQuestion();
+  }
+
+  function nextQuestion() {
+    // ゲームが停止されていたら何もしない
+    if (!gameActive) return;
+    if (currentQuestion >= TOTAL_QUESTIONS) {
+      endGame();
+      return;
+    }
+    // リセット済みなら処理しない(questionsが空の場合)
+    if (!questions || questions.length === 0) return;
+
+    const q = questions[currentQuestion];
+    if (!q) return;
+    currentAnswer = q.word;
+    currentEmoji = q.emoji;
+    currentTarget = [...q.word].reverse().join(''); // 逆さ表示
+    userTaps = [];
+    acceptingTaps = false; // アニメーション中はタップ不可
+
+    // 前の問題のシャボン玉と結果オーバーレイを完全に削除
+    bubbles.forEach(b => b.el.remove());
+    bubbles = [];
+    document.querySelectorAll('.result-overlay').forEach(o => o.remove());
+    document.querySelectorAll('.confetti').forEach(o => o.remove());
+    document.querySelectorAll('.letter-reveal').forEach(o => o.remove());
+    document.querySelectorAll('.reveal-dots').forEach(o => o.remove());
+
+    // 表示更新
+    document.getElementById('questionNum').textContent = `だい${currentQuestion + 1}もん / ${TOTAL_QUESTIONS}`;
+
+    // 上部の逆さ文字表示はアニメ後に表示する。最初は空に。
+    const targetEl = document.getElementById('targetLetters');
+    targetEl.innerHTML = '';
+
+    // リプレイボタンはアニメ中は無効化
+    const replayBtn = document.getElementById('replayBtn');
+    if (replayBtn) replayBtn.disabled = true;
+
+    // 回答スロットを4つ作成
+    const ansEl = document.getElementById('answerLetters');
+    ansEl.innerHTML = '';
+    for (let i = 0; i < 4; i++) {
+      const div = document.createElement('div');
+      div.className = 'answer-slot';
+      ansEl.appendChild(div);
+    }
+
+    // 1文字ずつ大きく表示するアニメーション → その後シャボン玉登場
+    revealLettersOneByOne(() => {
+      // リセットされていたら何もしない
+      if (!gameActive) return;
+      // シャボン玉を生成
+      createBubbles();
+      acceptingTaps = true;
+      // リプレイボタンを再度有効に
+      if (replayBtn) replayBtn.disabled = false;
+    });
+  }
+
+  // もう一度表示ボタンが押されたとき
+  function replayLetters() {
+    // 既に表示中なら何もしない
+    if (document.querySelector('.letter-reveal')) return;
+    const replayBtn = document.getElementById('replayBtn');
+    if (replayBtn) replayBtn.disabled = true;
+    // 文字表示中はシャボン玉を隠してタップも禁止
+    const wasAccepting = acceptingTaps;
+    acceptingTaps = false;
+    bubbles.forEach(b => b.el.classList.add('hidden-bubble'));
+    revealLettersOneByOne(() => {
+      // シャボン玉を再表示
+      bubbles.forEach(b => b.el.classList.remove('hidden-bubble'));
+      acceptingTaps = wasAccepting;
+      if (replayBtn) replayBtn.disabled = false;
+    });
+  }
+
+  // 逆さ文字を1文字ずつ画面中央に表示して消す
+  function revealLettersOneByOne(callback) {
+    const letters = [...currentTarget];
+    const game = document.getElementById('game');
+    const myToken = ++revealToken; // この呼び出し固有の世代番号
+
+    // 進捗ドットを表示
+    const dotsEl = document.createElement('div');
+    dotsEl.className = 'reveal-dots';
+    letters.forEach(() => {
+      const d = document.createElement('div');
+      d.className = 'reveal-dot';
+      dotsEl.appendChild(d);
+    });
+    game.appendChild(dotsEl);
+
+    let i = 0;
+    const showNext = () => {
+      // ゲームがリセットされた、または別の文字表示が始まったら中断
+      if (!gameActive || myToken !== revealToken) {
+        try { dotsEl.remove(); } catch(e) {}
+        document.querySelectorAll('.letter-reveal').forEach(el => el.remove());
+        return;
+      }
+      if (i >= letters.length) {
+        dotsEl.remove();
+        if (gameActive && myToken === revealToken) callback();
+        return;
+      }
+
+      // ドットをアクティブに
+      dotsEl.children[i].classList.add('active');
+
+      // 文字を表示
+      const letterEl = document.createElement('div');
+      letterEl.className = 'letter-reveal';
+      letterEl.textContent = letters[i];
+      game.appendChild(letterEl);
+
+      // 文字が出るときにポップ音
+      playLetterReveal();
+
+      // アニメーション終了後に削除して次へ
+      addTimer(() => {
+        letterEl.remove();
+        i++;
+        showNext();
+      }, 1000);
+    };
+
+    showNext();
+  }
+
+  // 1文字表示時の優しい音
+  // 問題の文字が表示されるときの音 (アップロードされたMP3)
+  function playLetterReveal() {
+    playLetterRevealSine();
+  }
+
+  function createBubbles() {
+    // 既存のシャボン玉をクリア
+    bubbles.forEach(b => b.el.remove());
+    bubbles = [];
+
+    // 正解の4文字を必ず含める。残り11個はランダムなひらがな
+    const HIRAGANA = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽきゃきゅきょしゃしゅしょちゃちゅちょにゃにゅにょひゃひゅひょみゃみゅみょりゃりゅりょぎゃぎゅぎょじゃじゅじょびゃびゅびょぴゃぴゅぴょっゃゅょー';
+
+    const letters = [...currentAnswer]; // 正解の文字
+    const usedSet = new Set(letters);
+
+    // 残り11個 (15 - 4)
+    while (letters.length < 15) {
+      const ch = HIRAGANA[Math.floor(Math.random() * HIRAGANA.length)];
+      // 同じ文字が複数あってもOK(難易度UP)だが、正解文字との被りを避けて分かりやすく
+      if (usedSet.has(ch) && Math.random() < 0.7) continue;
+      letters.push(ch);
+    }
+
+    const shuffled = shuffle(letters);
+
+    // 配置: 画面を格子状にして、それぞれにランダムオフセット
+    const game = document.getElementById('game');
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+
+    // 画面サイズに応じてマージンを調整
+    const isNarrow = W < 420;
+    const isShort = H < 700;
+    const topMargin = isShort ? 130 : 160;     // 上部UI(問題ラベル+リプレイボタン)
+    const bottomMargin = isShort ? 130 : 150;  // 下部UI(答えスロット+リセットボタン)
+    const sideMargin = 8;
+
+    const usableH = Math.max(200, H - topMargin - bottomMargin);
+    const usableW = W - sideMargin * 2;
+
+    // 画面が狭ければ4列×4行、広ければ5列×3行(計15個分)
+    const cols = isNarrow ? 4 : 5;
+    const rows = isNarrow ? 4 : 3;
+    const cellW = usableW / cols;
+    const cellH = usableH / rows;
+
+    const positions = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        positions.push({
+          x: sideMargin + cellW * c + cellW / 2,
+          y: topMargin + cellH * r + cellH / 2
+        });
+      }
+    }
+
+    // 位置をシャッフル
+    const shuffledPos = shuffle(positions);
+
+    shuffled.forEach((ch, i) => {
+      const pos = shuffledPos[i];
+      if (!pos) return; // セルが足りなければスキップ
+      // セル内でランダムにオフセット
+      const ox = (Math.random() - 0.5) * (cellW * 0.3);
+      const oy = (Math.random() - 0.5) * (cellH * 0.3);
+      createBubble(ch, pos.x + ox, pos.y + oy, Math.min(cellW, cellH));
+    });
+  }
+
+  function createBubble(letter, x, y, maxSize) {
+    const game = document.getElementById('game');
+    const el = document.createElement('div');
+    el.className = 'bubble';
+
+    // 画面サイズに応じてシャボン玉サイズを調整
+    // セルのサイズに収まる範囲で、できるだけ大きく(タップしやすく)
+    const cellMax = maxSize ? Math.min(maxSize * 0.95, 90) : 80;
+    const cellMin = Math.max(48, cellMax - 18);
+    const size = cellMin + Math.random() * (cellMax - cellMin);
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.left = (x - size/2) + 'px';
+    el.style.top = (y - size/2) + 'px';
+
+    // ふわふわアニメーション
+    const dur = 3 + Math.random() * 2;
+    const delay = Math.random() * -3;
+    el.style.animation = `float ${dur}s ease-in-out ${delay}s infinite`;
+
+    // 文字
+    const span = document.createElement('span');
+    span.className = 'bubble-letter';
+    span.textContent = letter;
+    // 小書き文字(ゃゅょっぁぃぅぇぉゎ)は小さめのまま、それ以外はシャボン玉いっぱいに
+    const SMALL_KANA = 'ゃゅょっぁぃぅぇぉゎ';
+    if (SMALL_KANA.includes(letter)) {
+      span.style.fontSize = (size * 0.4) + 'px';
+    } else {
+      span.style.fontSize = (size * 0.72) + 'px';
+      span.style.fontWeight = 'bold';
+    }
+    el.appendChild(span);
+
+    el.addEventListener('click', (e) => onBubbleTap(letter, el, e));
+    el.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      onBubbleTap(letter, el, e);
+    }, { passive: false });
+
+    game.appendChild(el);
+    bubbles.push({ el, letter });
+  }
+
+  function onBubbleTap(letter, el, event) {
+    if (!gameActive) return;
+    if (!acceptingTaps) return;
+    if (el.classList.contains('popping')) return;
+    if (userTaps.length >= 4) return;
+
+    // 破裂エフェクト(光のフラッシュ + 飛び散る水滴)を先に生成(位置取得のため)
+    createSplashEffect(el);
+
+    // タップした瞬間にシャボン玉本体は即削除(エフェクトだけ残る)
+    try { el.remove(); } catch(e) {}
+
+    // ポップ音
+    playPop();
+
+    // タップ記録
+    userTaps.push(letter);
+    updateAnswerDisplay();
+
+    // bubbles配列からも除去
+    bubbles = bubbles.filter(b => b.el !== el);
+
+    // 4文字タップしたら判定
+    if (userTaps.length === 4) {
+      acceptingTaps = false;
+      addTimer(() => {
+        if (!gameActive) return;
+        judgeAnswer();
+      }, 600);
+    }
+  }
+
+  // シャボン玉が弾けた時の派手なエフェクトを生成
+  function createSplashEffect(bubbleEl) {
+    const game = document.getElementById('game');
+    const rect = bubbleEl.getBoundingClientRect();
+    const gameRect = game.getBoundingClientRect();
+    const cx = rect.left - gameRect.left + rect.width / 2;
+    const cy = rect.top - gameRect.top + rect.height / 2;
+    const size = rect.width;
+
+    // 中央の光のフラッシュ
+    const flash = document.createElement('div');
+    flash.className = 'pop-flash';
+    flash.style.width = size * 1.2 + 'px';
+    flash.style.height = size * 1.2 + 'px';
+    flash.style.left = (cx - size * 0.6) + 'px';
+    flash.style.top = (cy - size * 0.6) + 'px';
+    game.appendChild(flash);
+    setTimeout(() => flash.remove(), 400);
+
+    // 飛び散る水滴(12個)を放射状に配置
+    const particleCount = 12;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.4;
+      const distance = size * 0.6 + Math.random() * size * 0.5;
+      const dx = Math.cos(angle) * distance;
+      const dy = Math.sin(angle) * distance;
+      const pSize = 6 + Math.random() * 10;
+
+      const p = document.createElement('div');
+      p.className = 'splash-particle';
+      p.style.width = pSize + 'px';
+      p.style.height = pSize + 'px';
+      p.style.left = (cx - pSize / 2) + 'px';
+      p.style.top = (cy - pSize / 2) + 'px';
+      p.style.setProperty('--dx', dx + 'px');
+      p.style.setProperty('--dy', dy + 'px');
+      const dur = 0.5 + Math.random() * 0.3;
+      p.style.animation = `splash ${dur}s cubic-bezier(0.2, 0.6, 0.4, 1) forwards`;
+      game.appendChild(p);
+      setTimeout(() => p.remove(), (dur + 0.1) * 1000);
+    }
+  }
+
+  function updateAnswerDisplay() {
+    const slots = document.querySelectorAll('.answer-slot');
+    slots.forEach((slot, i) => {
+      if (i < userTaps.length) {
+        slot.textContent = userTaps[i];
+        slot.classList.add('filled');
+      } else {
+        slot.textContent = '';
+        slot.classList.remove('filled');
+      }
+    });
+  }
+
+  function judgeAnswer() {
+    if (!gameActive) return;
+    const userAnswer = userTaps.join('');
+    const isCorrect = userAnswer === currentAnswer;
+
+    if (isCorrect) {
+      score++;
+      playCorrect();
+      showResult(true);
+    } else {
+      playWrong();
+      showResult(false);
+    }
+  }
+
+  function showResult(correct) {
+    const overlay = document.createElement('div');
+    overlay.className = 'result-overlay';
+
+    let html = '';
+    if (correct) {
+      html = `
+        <div class="result-box">
+          <div class="result-text correct">🎉 ピンポン!</div>
+          <div class="result-text correct" style="font-size:36px;">あたり!</div>
+          <div class="result-illustration">${currentEmoji}</div>
+          <div class="result-word">${currentAnswer}</div>
+        </div>`;
+      // 紙吹雪
+      launchConfetti();
+    } else {
+      html = `
+        <div class="result-box">
+          <div class="result-text wrong">ブッブー!</div>
+          <div class="result-text wrong" style="font-size:30px;">ざんねん...</div>
+          <div class="result-illustration">${currentEmoji}</div>
+          <div class="result-word">こたえ: ${currentAnswer}</div>
+          <div class="result-correct-answer">あなた: ${userTaps.join('')}</div>
+        </div>`;
+    }
+    overlay.innerHTML = html;
+    document.getElementById('game').appendChild(overlay);
+
+    addTimer(() => {
+      if (!gameActive) return;
+      overlay.remove();
+      currentQuestion++;
+      nextQuestion();
+    }, 2400);
+  }
+
+  function launchConfetti() {
+    const colors = ['#ff6b95', '#ffb84d', '#7ec8ff', '#a78bfa', '#7ed957', '#ffd93d'];
+    const game = document.getElementById('game');
+    for (let i = 0; i < 40; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.style.left = Math.random() * 100 + 'vw';
+      c.style.top = '-20px';
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+      const dur = 2 + Math.random() * 1.5;
+      c.style.animation = `confettiFall ${dur}s linear forwards`;
+      c.style.animationDelay = Math.random() * 0.5 + 's';
+      game.appendChild(c);
+      setTimeout(() => c.remove(), (dur + 0.5) * 1000);
+    }
+  }
+
+  function endGame() {
+    // 残ったシャボン玉を消す
+    bubbles.forEach(b => b.el.remove());
+    bubbles = [];
+
+    document.getElementById('topBar').classList.add('hidden');
+    document.getElementById('answerBar').classList.add('hidden');
+    document.getElementById('restartBar').classList.add('hidden');
+
+    document.getElementById('finalScore').textContent = `${score} / ${TOTAL_QUESTIONS}`;
+    let message = '';
+    if (score === TOTAL_QUESTIONS) message = 'パーフェクト! すごい!! 🌟';
+    else if (score >= 8) message = 'とっても じょうず! ✨';
+    else if (score >= 5) message = 'よく できました! 👏';
+    else if (score >= 3) message = 'がんばったね! 💪';
+    else message = 'もう一度 ちょうせんしてみよう! 🌱';
+    document.getElementById('finalMessage').textContent = message;
+
+    document.getElementById('endScreen').classList.remove('hidden');
+    if (score >= 7) launchConfetti();
+  }
+
+  function confirmRestart() {
+    if (confirm('もう一度 さいしょから あそびますか?')) {
+      restartGame();
+    }
+  }
+
+  function confirmQuit() {
+    // ダイアログを出さずに即リセット
+    quitGame();
+  }
+
+  function quitGame() {
+    // ゲームを停止状態に(進行中のコールバックも次のステップを実行しないようガード)
+    gameActive = false;
+    revealToken++; // 古い文字表示の続きを無効化
+    // タップ受付を停止
+    acceptingTaps = false;
+    // 進行中のタイマーをすべてキャンセル
+    pendingTimers.forEach(t => clearTimeout(t));
+    pendingTimers = [];
+    // 全シャボン玉削除
+    bubbles.forEach(b => b.el.remove());
+    bubbles = [];
+    // 各種オーバーレイをすべて削除
+    document.querySelectorAll('.result-overlay').forEach(o => o.remove());
+    document.querySelectorAll('.confetti').forEach(o => o.remove());
+    document.querySelectorAll('.letter-reveal').forEach(o => o.remove());
+    document.querySelectorAll('.reveal-dots').forEach(o => o.remove());
+    // ゲーム状態をリセット
+    currentQuestion = 0;
+    score = 0;
+    userTaps = [];
+    questions = [];
+    // 表示をスタート画面に戻す
+    document.getElementById('topBar').classList.add('hidden');
+    document.getElementById('answerBar').classList.add('hidden');
+    document.getElementById('restartBar').classList.add('hidden');
+    document.getElementById('endScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.remove('hidden');
+  }
+
+  function restartGame() {
+    // 全シャボン玉削除
+    bubbles.forEach(b => b.el.remove());
+    bubbles = [];
+    // すべての結果オーバーレイ削除
+    document.querySelectorAll('.result-overlay').forEach(o => o.remove());
+    document.querySelectorAll('.confetti').forEach(o => o.remove());
+    document.getElementById('endScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.add('hidden');
+    startGame();
+  }
+
+  // 画面リサイズ時にシャボン玉を再配置
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (bubbles.length > 0 && acceptingTaps) {
+        createBubbles();
+      }
+    }, 300);
+  });
+
+  // リセットボタンに確実なイベントリスナーを設定
+  // (onclick属性が何らかの理由で動かない場合の対策。click + touchstart両対応)
+  const quitBtnEl = document.getElementById('quitBtn');
+  if (quitBtnEl) {
+    let quitTouched = false;
+    quitBtnEl.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      quitTouched = true;
+      confirmQuit();
+    }, { passive: false });
+    quitBtnEl.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // touchstartで既に処理済みならスキップ
+      if (quitTouched) { quitTouched = false; return; }
+      confirmQuit();
+    });
+  }
+
+  // === スマホ最適化: ピンチズーム・ダブルタップズーム・スクロールを防止 ===
+  // ピンチズーム防止
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('gesturechange', e => e.preventDefault());
+  document.addEventListener('gestureend', e => e.preventDefault());
+
+  // ダブルタップズーム防止
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 300) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  // 引っ張って更新(プルトゥリフレッシュ)防止
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+
+  // 画面の向き変更時にシャボン玉を再配置
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      if (gameActive && bubbles.length > 0 && acceptingTaps) {
+        createBubbles();
+      }
+    }, 300);
+  });
+</script>
+</body>
+</html>
